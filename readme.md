@@ -38,6 +38,14 @@ python train_sf-yolo.py --epochs 60 --batch-size 16 --data foggy_cityscapes.yaml
 Other scenarios can be run by following the same steps. All source model weights are available [here](https://drive.proton.me/urls/5WFVDJBDAC#EPs8OZmXtbWq).
 
 
+### Step 3:  Val
+
+run
+
+```
+python val.py --data cityscapes.yaml --weights ./source_weights/yolov5l_cityscapes.pt --device 0
+```
+
 ### Acknowledgment
 
 Thanks to the creators of [YOLOv5](https://github.com/ultralytics/yolov5), [AdaIN](https://github.com/naoto0804/pytorch-AdaIN) and [LODS](https://github.com/Flashkong/Source-Free-Object-Detection-by-Learning-to-Overlook-Domain-Style) , which this implementation is built upon.

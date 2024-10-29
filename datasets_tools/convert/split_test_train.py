@@ -3,7 +3,7 @@ import shutil
 
 # 文件路径
 image_dir = './foggy_cityscapes_beta_0.01_voc_format/VOC2007/JPEGImages'
-label_dir = './labels'
+label_dir = './foggy_cityscapes_beta_0.01_voc_format/VOC2007/labels'
 test_txt = './foggy_cityscapes_beta_0.01_voc_format/VOC2007/ImageSets/Main/test.txt'
 trainval_txt = './foggy_cityscapes_beta_0.01_voc_format/VOC2007/ImageSets/Main/trainval.txt'
 

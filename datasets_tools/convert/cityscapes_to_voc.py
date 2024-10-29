@@ -68,10 +68,10 @@ if __name__ == "__main__":
     #----------
     #arguments
     #----------
-    cityscapes_dir = '/home/ecust/txx/dataset/object_detection_open_dataset/VOC/cityscapes'
+    cityscapes_dir = './'
     save_path = os.path.join(cityscapes_dir,"cityscapes_voc_format")
 
-    cityscapes_dir_gt = os.path.join(cityscapes_dir, 'gtFine_trainvaltest', 'gtFine')
+    cityscapes_dir_gt = os.path.join(cityscapes_dir, 'gtFine')
 
 
     #--------------------------------------------------------------
@@ -105,20 +105,31 @@ if __name__ == "__main__":
         for city in os.listdir(os.path.join(cityscapes_dir_gt, category)):
 
             # read files
-            files = glob.glob(os.path.join(cityscapes_dir,'gtFine_trainvaltest', 'gtFine', category, city) + '/*.json')
+            files = glob.glob(os.path.join(cityscapes_dir, 'gtFine', category, city) + '/*.json')
 
             # process json files
             for file in files:
-                data, relevant_file = read_json(file)
+                try:
+                    data, relevant_file = read_json(file)
+                except Exception as e:
+                    print(f"Error reading JSON file: {file}")
+                    print(f"Exception: {e}")
+                    continue  # 跳过这个文件，继续下一个
 
                 if relevant_file:
-                    count += 1
                     base_filename = os.path.basename(file)[:-21]
                     xml_filepath = os.path.join(ann_dir, base_filename + '_leftImg8bit.xml')
                     img_name = base_filename + '_leftImg8bit.png'
-                    img_path = os.path.join(cityscapes_dir, 'leftImg8bit_trainvaltest', 'leftImg8bit', category, city,
+                    img_path = os.path.join(cityscapes_dir, 'leftImg8bit', category, city,
                                             base_filename + '_leftImg8bit.png')
-                    img_shape = plt.imread(img_path).shape
+                    
+                    try:
+                        img_shape = plt.imread(img_path).shape
+                    except Exception as e:
+                        print(f"Error reading image file: {img_path}")
+                        print(f"Exception: {e}")
+                        continue  # 跳过这个文件，继续下一个
+                    
                     valid_files.append([img_path, img_name])
 
                     # make list of trainval and test files for voc format
@@ -127,6 +138,7 @@ if __name__ == "__main__":
 
                     # save xml file
                     save_xml(img_path, img_shape, data, xml_filepath)
+                    count += 1
 
     end = time.time() - start
     print('Total Time taken: ', end)
