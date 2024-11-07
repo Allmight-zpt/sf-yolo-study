@@ -15,6 +15,9 @@ pip install -r requirements.txt
 - Convert the datasets to YOLO format and place them into the ./datasets folder.
 
 ### Step 1: Train the Target Augmentation Module
+1. mean图像如何获取
+2. 得到风格转换模型之后如何使用
+
 Extract target training data :
 ```shell
 cd TargetAugment_train
