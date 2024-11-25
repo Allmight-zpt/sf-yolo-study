@@ -4,9 +4,17 @@
 python get_mean_image.py
 ```
 
-### 向数据集中的每一张图片添加雾天效果
+### 给数据集添加雾天效果
 ```
 python add_foggy.py
 ```
 
-### 试试sf-yolo中添加style的方法  而不是直接加雾
+### 去除数据集的雾天效果
+```
+python remove_foggy.py
+```
+
+### 计算两个数据集之间的距离
+```
+python data_distance.py
+```

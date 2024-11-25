@@ -22,6 +22,7 @@ def add_hazy(image, beta=0.05, brightness=0.5):
     hazy_img = np.clip(img_f * 255, 0, 255).astype(np.uint8)
     return hazy_img
 
+
 def process_images_in_folder(input_folder, output_folder, beta=0.05, brightness=0.5):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -42,9 +43,9 @@ def process_images_in_folder(input_folder, output_folder, beta=0.05, brightness=
             print(f"Error processing {img_path}: {e}")
 
 if __name__ == '__main__':
-    input_folder = r'D:\file\data_for_test\official_city'
-    output_folder = r'D:\file\data_for_test\generate_city_foggy'
-    beta = 0.01
+    input_folder = r'../origin_data'
+    output_folder = r'../foggy_data_0.007'
+    beta = 0.007
     brightness = 0.8
 
     process_images_in_folder(input_folder, output_folder, beta, brightness)

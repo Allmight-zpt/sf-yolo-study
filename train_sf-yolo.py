@@ -630,7 +630,11 @@ def parse_opt(known=False):
     parser.add_argument('--style_add_alpha', type=float, default=1, help='The amount of style to add to the image (between 0 and 1)')        
     parser.add_argument('--save_style_samples', action='store_true', help='Save style samples images (useful to debug)')
     parser.add_argument('--SSM_alpha', type=float, default=0.0, help='SSM momentum')
-    
+
+    # TargetAugment_v2
+    parser.add_argument('--haze_beta', type=float, default=0.0, help='SSM momentum')
+    parser.add_argument('--haze_brightness', type=float, default=0.0, help='SSM momentum')
+
     return parser.parse_known_args()[0] if known else parser.parse_args()
 
 
