@@ -5,7 +5,7 @@ import matplotlib
 import os
 
 
-class enhance_haze:
+class atmo_enhance:
     def __init__(self, args):
         self.pixel_means = np.array([[[102.9801, 115.9465, 122.7717]]])
         self.target_size = args.imgsz

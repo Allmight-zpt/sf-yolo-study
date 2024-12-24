@@ -143,6 +143,12 @@ if __name__ == "__main__":
                     # Save XML file
                     save_xml(img_path, img_shape, data, xml_filepath)
                     count += 1
+                else:
+                    img_path = os.path.join(
+                        foggy_cityscapes_dir, 'leftImg8bit_foggy', category, city,
+                        base_filename + '_leftImg8bit_foggy_beta_{}.png'.format(beta)
+                    )
+                    print(f"not relevant file:{img_path}")
 
 
     end = time.time() - start

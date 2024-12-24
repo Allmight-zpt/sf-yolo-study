@@ -2,18 +2,18 @@
 from torchvision import models
 import torch.nn as nn
 import torch
-from TargetAugment.enhance_base import enhance_base
+from TargetAugment.aug_v3_cycle.cycle_enhance_base import cycle_enhance_base
 
 
-class enhance_vgg16(enhance_base):
-    def __init__(self, args, deAug=False):
+class cycle_enhance_vgg16(cycle_enhance_base):
+    def __init__(self, args, de_aug=False):
         decoder = self.get_decoder()
         vgg = self.get_vgg()
         fcs = self.get_fcs()
         # print("using fcs...")
-        vgg, decoder, fcs = self.load_param(args, vgg, decoder, fcs, deAug)
+        vgg, decoder, fcs = self.load_param(args, vgg, decoder, fcs, de_aug)
         self.encoders, self.decoders = self.splits(vgg, decoder)
-        enhance_base.__init__(self, args, self.encoders, self.decoders, fcs)
+        cycle_enhance_base.__init__(self, args, self.encoders, self.decoders, fcs, de_aug)
 
     def splits(self, vgg, decoder):
         encoders = []
@@ -72,7 +72,7 @@ class enhance_vgg16(enhance_base):
         )
         return decoder
 
-    def load_param(self, args, vgg, decoder, fcs, deAug=False):
+    def load_param(self, args, vgg, decoder, fcs, de_aug=False):
         for param in vgg.parameters():
             param.requires_grad = False
         for param in decoder.parameters():
@@ -80,12 +80,12 @@ class enhance_vgg16(enhance_base):
         for i in range(len(fcs)):
             for param in fcs[i].parameters():
                 param.requires_grad = False
-        if deAug:
-            decoder.load_state_dict(torch.load(args.deAug_decoder_path))
-            vgg.load_state_dict(torch.load(args.deAug_encoder_path)['model'])
+        if de_aug:
+            decoder.load_state_dict(torch.load(args.de_aug_decoder_path))
+            vgg.load_state_dict(torch.load(args.de_aug_encoder_path)['model'])
             vgg = nn.Sequential(*list(vgg.children())[:19])
-            fcs[0].load_state_dict(torch.load(args.deAug_fc1))
-            fcs[1].load_state_dict(torch.load(args.deAug_fc2))
+            fcs[0].load_state_dict(torch.load(args.de_aug_fc1))
+            fcs[1].load_state_dict(torch.load(args.de_aug_fc2))
         else:
             decoder.load_state_dict(torch.load(args.decoder_path))
             vgg.load_state_dict(torch.load(args.encoder_path)['model'])

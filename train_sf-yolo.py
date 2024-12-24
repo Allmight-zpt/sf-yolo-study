@@ -67,12 +67,15 @@ from utils.torch_utils import (EarlyStopping, ModelEMA, WeightEMA, de_parallel, 
                                smart_resume, torch_distributed_zero_first)
 from TargetAugment.enhance_style import get_style_images
 from TargetAugment.enhance_vgg16 import enhance_vgg16
+from TargetAugment.aug_v3_cycle.cycle_enhance import cycle_enhance
+from TargetAugment.aug_v2_atmo.atmo_enhance import atmo_enhance
+from TargetAugment.aug_v3_cycle.cycle_merge import FullyConnectedLayer
 
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
-GIT_INFO = check_git_info()
+# GIT_INFO = check_git_info()
 
 # Avoid excessive CPU usage on shared servers by limiting the number of threads
 N_CORE = "16"
@@ -195,6 +198,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     accumulate = max(round(nbs / batch_size), 1)  # accumulate loss before optimizing
     hyp['weight_decay'] *= batch_size * accumulate / nbs  # scale weight_decay
     optimizer_student = smart_optimizer(model_student, opt.optimizer, hyp['lr0'], hyp['momentum'], hyp['weight_decay'])
+    # TargetAugment_v3 cycle augment
+    model_cycle = None
+    optimizer_cycle = None
+    if opt.aug_v3_cycle:
+        model_cycle = FullyConnectedLayer().to(device)
+        optimizer_cycle = smart_optimizer(model_cycle, opt.optimizer, hyp['lr0'], hyp['momentum'], hyp['weight_decay'])
 
     # Unbiased Mean Teacher [github.com/kinredon/umt]
     def get_params(model, requires_grad=True, set_requires_grad=None):
@@ -208,18 +217,28 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     teacher_detection_params = get_params(model_teacher, set_requires_grad=False)
     optimizer_teacher = WeightEMA(teacher_detection_params, student_detection_params, alpha=teacher_alpha)
 
+    # TargetAugment_v3 cycle augment
+    scheduler_cycle = None
     if opt.cos_lr:
         lf = one_cycle(1, hyp['lrf'], epochs)  # cosine 1->hyp['lrf']
-        scheduler = lr_scheduler.LambdaLR(optimizer_student, lr_lambda=lf) 
+        scheduler = lr_scheduler.LambdaLR(optimizer_student, lr_lambda=lf)
+        if opt.aug_v3_cycle:
+            scheduler_cycle = lr_scheduler.LambdaLR(optimizer_cycle, lr_lambda=lf)
     elif opt.CosineAnnealingLR:
         lf = lambda x: ((1 + math.cos(x * math.pi / epochs)) / 2) * (1 - hyp['lrf']) + hyp['lrf'] 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_student, T_max=10, eta_min=hyp['lr0'] * hyp['lrf'], last_epoch=-1)
+        if opt.aug_v3_cycle:
+            scheduler_cycle = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_cycle, T_max=10, eta_min=hyp['lr0'] * hyp['lrf'], last_epoch=-1)
     elif opt.CosineAnnealingWarmRestarts:
         lf = lambda x: ((1 + math.cos(x * math.pi / epochs)) / 2) * (1 - hyp['lrf']) + hyp['lrf']  
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer_student, T_0=20, T_mult=2, eta_min=hyp['lr0'] * hyp['lrf'], last_epoch=-1)
+        if opt.aug_v3_cycle:
+            scheduler_cycle = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer_cycle, T_0=20, T_mult=2, eta_min=hyp['lr0'] * hyp['lrf'], last_epoch=-1)
     else:
         lf = lambda x: (1 - x / epochs) * (1.0 - hyp['lrf']) + hyp['lrf']  
-        scheduler = lr_scheduler.LambdaLR(optimizer_student, lr_lambda=lf)  
+        scheduler = lr_scheduler.LambdaLR(optimizer_student, lr_lambda=lf)
+        if opt.aug_v3_cycle:
+            scheduler_cycle = lr_scheduler.LambdaLR(optimizer_cycle, lr_lambda=lf)
 
     # EMA
     ema = ModelEMA(model_student) if RANK in {-1, 0} else None
@@ -229,6 +248,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     if pretrained:
         if resume:
             best_fitness, start_epoch, epochs = smart_resume(ckpt, optimizer_student, ema, weights, epochs, resume)
+            # TargetAugment_v3 cycle augment
+            # TODO v3 resume
         del ckpt, csd
 
     # DP mode
@@ -320,6 +341,9 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     maps = np.zeros(nc)  # mAP per class
     results = (0, 0, 0, 0, 0, 0, 0)  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
     scheduler.last_epoch = start_epoch - 1  # do not move
+    # TargetAugment_v3 cycle augment
+    if opt.aug_v3_cycle:
+        scheduler_cycle.last_epoch = start_epoch - 1  # do not move
     scaler = torch.cuda.amp.GradScaler(enabled=amp)
     stopper, stop = EarlyStopping(patience=opt.patience), False
     compute_loss = ComputeLoss(model_student)  # init loss class
@@ -329,8 +353,18 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 f"Logging results to {colorstr('bold', save_dir)}\n"
                 f'Starting training for {epochs} epochs...')
                 # if ni % (nb // 4) == 0 and ni!=nb:
-    
+
     adain = enhance_vgg16(opt)
+    # TargetAugment_v4 cycle forward twice augment
+    if opt.aug_v4_cycle_forward_twice:
+        adain = cycle_enhance(opt)
+    # TargetAugment_v3 cycle augment
+    if opt.aug_v3_cycle:
+        adain = cycle_enhance(opt)
+    # TargetAugment_v2 atmosphere scattering
+    if opt.aug_v2_atmo:
+        adain = atmo_enhance(opt)
+
     
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         callbacks.run('on_train_epoch_start')
@@ -356,6 +390,9 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         if RANK in {-1, 0}:
             pbar = tqdm(pbar, total=nb, bar_format=TQDM_BAR_FORMAT)  # progress bar
         optimizer_student.zero_grad()
+        # TargetAugment_v3 cycle augment
+        if opt.aug_v3_cycle:
+            optimizer_cycle.zero_grad()
         
         if SSM_alpha != 0.0:
             if epoch != start_epoch:
@@ -386,6 +423,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     x['lr'] = np.interp(ni, xi, [hyp['warmup_bias_lr'] if j == 0 else 0.0, x['initial_lr'] * lf(epoch)])
                     if 'momentum' in x:
                         x['momentum'] = np.interp(ni, xi, [hyp['warmup_momentum'], hyp['momentum']])
+                # TargetAugment_v3 cycle augment
+                if opt.aug_v3_cycle:
+                    for j, x in enumerate(optimizer_cycle.param_groups):
+                        # bias lr falls from 0.1 to lr0, all other lrs rise from 0.0 to lr0
+                        x['lr'] = np.interp(ni, xi, [hyp['warmup_bias_lr'] if j == 0 else 0.0, x['initial_lr'] * lf(epoch)])
+                        if 'momentum' in x:
+                            x['momentum'] = np.interp(ni, xi, [hyp['warmup_momentum'], hyp['momentum']])
 
             # Multi-scale
             if opt.multi_scale:
@@ -398,7 +442,16 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             # Forward
             with torch.cuda.amp.autocast(amp):
                 imgs_style = get_style_images(imgs_255, opt, adain) / 255
-                    
+
+                imgs_style_0, imgs_style_1 = None, None
+                # TargetAugment_v4 cycle forward twice augment
+                if opt.aug_v4_cycle_forward_twice:
+                    imgs_style_0, imgs_style_1 = torch.split(imgs_style, 3, dim=1)
+
+                # TargetAugment_v3 cycle augment
+                if opt.aug_v3_cycle:
+                    imgs_style = model_cycle(imgs_style)
+
                 # Teacher forward 
                 model_teacher.eval()
                 pred_teacher, _ = model_teacher(imgs)  # inference on teacher to obtain pseudo labels
@@ -406,7 +459,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                             
                 # Student forward
                 model_student.zero_grad()
-                pred_student = model_student(imgs_style)  # forward
+                # TargetAugment_v4 cycle forward twice augment
+                if opt.aug_v4_cycle_forward_twice:
+                    pred_student_0 = model_student(imgs_style_0)
+                    pred_student_1 = model_student(imgs_style_1)
+                    pred_student = [0.5 * pred_student_0[i] + (1 - 0.5) * pred_student_1[i] for i in range(len(pred_student_0))]
+                else:
+                    pred_student = model_student(imgs_style)  # forward
                     
                 # Generate pseudo labels using the teacher's prediction in order to obtain student loss
                 batch_size, ch, img_height, img_width = imgs.shape
@@ -445,8 +504,15 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 scaler.unscale_(optimizer_student)  # unscale gradients
                 torch.nn.utils.clip_grad_norm_(model_student.parameters(), max_norm=10.0)  # clip gradients
                 scaler.step(optimizer_student)  # optimizer.step
-                scaler.update()
+                # scaler.update() # if not consider aug v3 it must run
                 optimizer_student.zero_grad()
+                # TargetAugment_v3 cycle augment
+                if opt.aug_v3_cycle:
+                    scaler.unscale_(optimizer_cycle)
+                    torch.nn.utils.clip_grad_norm_(model_cycle.parameters(), max_norm=10.0)
+                    scaler.step(optimizer_cycle)
+                    optimizer_cycle.zero_grad()
+                scaler.update()
                 if ema:
                     ema.update(model_student)
                 last_opt_step = ni
@@ -471,6 +537,9 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         # Scheduler
         lr = [x['lr'] for x in optimizer_student.param_groups]  # for loggers
         scheduler.step()
+        # TargetAugment_v3 cycle augment
+        if opt.aug_v3_cycle:
+            scheduler_cycle.step()
 
         if RANK in {-1, 0}:
             # mAP
@@ -509,7 +578,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     'updates': ema.updates,
                     'optimizer': optimizer_student.state_dict(),
                     'opt': vars(opt),
-                    'git': GIT_INFO,  # {remote, branch, commit} if a git repo
+                    # 'git': GIT_INFO,  # {remote, branch, commit} if a git repo
                     'date': datetime.now().isoformat()}
                 
                 ckpt_teacher = {
@@ -517,16 +586,33 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     'best_fitness': best_fitness,
                     'model': deepcopy(de_parallel(model_teacher)).half(),
                     'opt': vars(opt),
-                    'git': GIT_INFO,  # {remote, branch, commit} if a git repo
+                    # 'git': GIT_INFO,  # {remote, branch, commit} if a git repo
                     'date': datetime.now().isoformat()}
+
+                ckpt_cycle = None
+                # TargetAugment_v3 cycle augment
+                if opt.aug_v3_cycle:
+                    ckpt_cycle = {
+                        'epoch': epoch,
+                        'best_fitness': best_fitness,
+                        'model': deepcopy(de_parallel(model_cycle)).half(),
+                        'opt': vars(opt),
+                        # 'git': GIT_INFO,  # {remote, branch, commit} if a git repo
+                        'date': datetime.now().isoformat()}
 
                 # Save last, best and delete
                 torch.save(ckpt_teacher, last_teacher)
                 if best_fitness == fi:
                     torch.save(ckpt_teacher, best_teacher)
+                    # TargetAugment_v3 cycle augment
+                    if opt.aug_v3_cycle:
+                        torch.save(ckpt_cycle, w / 'best_cycle.pt')
                 if opt.save_period > 0 and epoch % opt.save_period == 0:
                     torch.save(ckpt_teacher, w / f'epoch{epoch}_teacher.pt')
-                del ckpt_student, ckpt_teacher
+                    # TargetAugment_v3 cycle augment
+                    if opt.aug_v3_cycle:
+                        torch.save(ckpt_cycle, w / f'epoch{epoch}_cycle.pt')
+                del ckpt_student, ckpt_teacher, ckpt_cycle
                 callbacks.run('on_model_save', last_teacher, epoch, final_epoch, best_fitness, fi)
 
         # EarlyStopping
@@ -631,9 +717,24 @@ def parse_opt(known=False):
     parser.add_argument('--save_style_samples', action='store_true', help='Save style samples images (useful to debug)')
     parser.add_argument('--SSM_alpha', type=float, default=0.0, help='SSM momentum')
 
-    # TargetAugment_v2
+    # TargetAugment_v2 atmosphere scattering
+    parser.add_argument('--aug_v2_atmo', action='store_true', help='use target augmentation version 2 atmosphere scattering')
     parser.add_argument('--haze_beta', type=float, default=0.0, help='SSM momentum')
     parser.add_argument('--haze_brightness', type=float, default=0.0, help='SSM momentum')
+
+    # TargetAugment_v3 cycle augment
+    parser.add_argument('--aug_v3_cycle', action='store_true', help='use target augmentation version 3 cycle augment')
+    parser.add_argument('--de_aug_decoder_path', type=str, help='de aug Decoder path')
+    parser.add_argument('--de_aug_encoder_path', type=str, help='de aug Encoder path')
+    parser.add_argument('--de_aug_fc1', type=str, help='de aug fc1 path')
+    parser.add_argument('--de_aug_fc2', type=str, help='de aug fc2 path')
+    parser.add_argument('--de_aug_style_path', type=str, default="", help='Path to the de aug style image, if not specified, random style will be used')
+    parser.add_argument('--de_aug_style_add_alpha', type=float, default=1, help='The amount of de aug style to add to the image (between 0 and 1)')
+    parser.add_argument('--de_aug_save_style_samples', action='store_true', help='Save de aug style samples images (useful to debug)')
+
+    # TargetAugment_v4 cycle forward twice augment
+    parser.add_argument('--aug_v4_cycle_forward_twice', action='store_true', help='use target augmentation version 4 cycle forward twice augment')
+
 
     return parser.parse_known_args()[0] if known else parser.parse_args()
 

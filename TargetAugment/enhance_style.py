@@ -1,14 +1,39 @@
 import sys
-from TargetAugment.TargetAugment_v2.enhance_haze import enhance_haze
+
+import torch
+
+from TargetAugment.aug_v3_cycle.cycle_enhance import cycle_enhance
+from TargetAugment.aug_v2_atmo.atmo_enhance import atmo_enhance
 from TargetAugment.enhance_vgg16 import enhance_vgg16
 
 
+
 def get_style_images(im_data, args, adain=None):
+    # TargetAugment_v4 cycle forward twice augment
+    if args.aug_v4_cycle_forward_twice:
+        cycle = adain
+        if cycle is None:
+            cycle = cycle_enhance(args)
+        style_im_data = torch.concat([im_data, im_data], dim=1) * 0 + 1 * cycle.add_style(im_data, 0, save_images=args.save_style_samples, de_aug_save_images=args.de_aug_save_style_samples)
+        # sys.exit("exit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        return style_im_data
+    # augment v3 cycle augment
+    if args.aug_v3_cycle:
+        cycle = adain
+        if cycle is None:
+            cycle = cycle_enhance(args)
+        style_im_data = torch.concat([im_data, im_data], dim=1) * 0 + 1 * cycle.add_style(im_data, 0, save_images=args.save_style_samples, de_aug_save_images=args.de_aug_save_style_samples)
+        return style_im_data
+    # augment v2 atmosphere scattering
+    if args.aug_v2_atmo:
+        atmo = adain
+        if atmo is None:
+            atmo = atmo_enhance(args)
+        styled_im_data = im_data * 0 + 1 * atmo.add_style(im_data, 0, save_images=args.save_style_samples)
+        return styled_im_data
+    # augment v1 sf-yolo
     if adain is None:
         adain = enhance_vgg16(args)
-    if args.haze_beta != 0:
-        adain = enhance_haze(args)
     # Apply style to the image, use save_images=True to save the images (useful for debugging)
     styled_im_data = im_data * 0 + 1 * adain.add_style(im_data, 0, save_images=args.save_style_samples)
-    # sys.exit("exit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     return styled_im_data

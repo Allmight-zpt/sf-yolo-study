@@ -55,6 +55,16 @@ def normalize_data(data):
     return (data - min_val) / (max_val - min_val)
 
 
+def get_file_paths(folder_name):
+    ret = []
+    if not os.path.isdir(folder_name):
+        print(f"路径 {folder_name} 不是一个有效的文件夹!")
+    for file_name in os.listdir(folder_name):
+        file_path = os.path.join(folder_name, file_name)
+        ret.append(file_path)
+    return ret
+
+
 def process_folders(folder_paths):
     """
     遍历多个文件夹，计算每张图片的压缩比，并按文件夹分类整理数据
@@ -94,25 +104,6 @@ def process_folders(folder_paths):
         idx += num_images
 
     return folder_compression_ratios
-
-
-# def visualize_compression_ratios(folder_compression_ratios, labels):
-#     """
-#     可视化每个文件夹的压缩比数据
-#
-#     :param folder_compression_ratios: 每个文件夹的压缩比列表
-#     """
-#     plt.figure(figsize=(10, 6))
-#
-#     for idx, (_, ratios) in enumerate(folder_compression_ratios.items()):
-#         plt.hist(ratios, bins=20, alpha=0.7, label=labels[idx])
-#
-#     plt.title('PNG Image Compression Ratios')
-#     plt.xlabel('Compression Ratio')
-#     plt.ylabel('Frequency')
-#     plt.legend()
-#     plt.grid(True)
-#     plt.show()
 
 
 def visualize_compression_ratios(folder_compression_ratios, labels):
@@ -177,7 +168,8 @@ def plot_heatmap(folder_compression_ratios, labels, num_bins=10):
 
 
 if __name__ == '__main__':
-    # 示例使用
+    """
+        # 示例使用
     aug_folder_paths = [
         "./runs/train/exp/enhance_style_samples",
         "./runs/train/exp2/enhance_style_samples",
@@ -254,25 +246,42 @@ if __name__ == '__main__':
         "alpha_cycle: 0.8",
         "foggy"
     ]
+    """
 
-    # 一个原图两个border
+    # 1. 数据源
     three_images = [
         "./sub_datasets_foggy_cycle/origin_data",
         "./sub_datasets_foggy/origin_data",
         "./sub_datasets_foggy_foggy_0.4/origin_data"
     ]
-
+    # 2. 数据源标签
     three_labels = [
         "deaug",
         "origin",
         "aug"
     ]
 
+    '''
+    CAL：是否重新计算compress值并写入文件
+    FROM_FILE:直接从文件中读取compress值
+    PLOT:是否画图
+    '''
+    #
+    CAL = False
+    #
+    From_FILE = True
+    # 是否画图
+    PLOT = True
 
-    folder_compression_ratios = process_folders(three_images)
-    df = pd.DataFrame(folder_compression_ratios)
-    file_paths = get_file_paths("./sub_datasets_foggy/origin_data")
-    df['file_paths'] = file_paths
-    df.to_csv('compression_ratios.csv', index=False)  # index=False 防止将行索引写入文件
-    visualize_compression_ratios(folder_compression_ratios, three_labels)
-    plot_heatmap(folder_compression_ratios, three_labels, num_bins=15)
+    folder_compression_ratios = None
+    if CAL:
+        folder_compression_ratios = process_folders(three_images)
+        df = pd.DataFrame(folder_compression_ratios)
+        file_paths = get_file_paths("./sub_datasets_foggy/origin_data")
+        df['file_paths'] = file_paths
+        df.to_csv('compression_ratios.csv', index=False)  # index=False 防止将行索引写入文件
+    if From_FILE:
+        folder_compression_ratios = pd.read_csv('compression_ratios.csv').iloc[:, 0:-1].to_dict(orient='list')
+    if PLOT:
+        visualize_compression_ratios(folder_compression_ratios, three_labels)
+        plot_heatmap(folder_compression_ratios, three_labels, num_bins=15)

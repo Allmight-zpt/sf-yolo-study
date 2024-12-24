@@ -42,10 +42,11 @@ def process_images_in_folder(input_folder, output_folder, beta=0.05, brightness=
         except Exception as e:
             print(f"Error processing {img_path}: {e}")
 
+
 if __name__ == '__main__':
-    input_folder = r'../origin_data'
-    output_folder = r'../foggy_data_0.007'
-    beta = 0.007
+    input_folder = r'../datasets/origin_data'
+    output_folder = r'../datasets/foggy_data_0.15'
+    beta = 0.6
     brightness = 0.8
 
     process_images_in_folder(input_folder, output_folder, beta, brightness)

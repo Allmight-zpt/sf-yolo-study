@@ -10,36 +10,9 @@ import os
 import random
 from torchvision import transforms as transforms
 
-class cycle_enhance_base:
-    def add_style(self, content, flag, save_images=False):
-        if flag == 0:
-            self.step += 1
-        assert (len(content.size()) == 4)
-        if self.args.random_style:
-            style = self.load_style_img(self.args, content, wh=(content.size(3),content.size(2)))
-        else:
-            if self.style_feats[flag][0].size() == content[0].size():
-                # style = self.coral(self.style_feats[flag][0], content[0])
-                style=self.style_feats[flag][0]
-            else:
-                style = self.load_style_img(self.args, content, wh=(content.size(3),content.size(2)))
-        with torch.no_grad():
-            output = self.style_transfer(content[0], style, flag, self.alpha)
-        for i in range(1, content.size(0)):
-            # style = self.coral(self.style_feats[flag][0], content[i])
-            with torch.no_grad():
-                output = torch.cat((output, self.style_transfer(
-                    content[i], style, flag, self.alpha)), 0)
-        if flag==0:
-            # clip 0-255
-            output=(output.permute(0,2,3,1)+torch.from_numpy(self.pixel_means).float().cuda()).clamp(0,255)
-            output=output.permute(0,3,1,2).contiguous()
-            if self.step%30==1 and save_images:
-                self.show(content,content=True)
-                self.show(output)
-        return output.detach()
 
-    def __init__(self, args, encoders, decoders, fcs):
+class cycle_enhance_base:
+    def __init__(self, args, encoders, decoders, fcs, de_aug=False):
         assert len(encoders) == len(decoders)
         self.pixel_means = np.array([[[102.9801, 115.9465, 122.7717]]])
         self.target_size = args.imgsz
@@ -48,7 +21,10 @@ class cycle_enhance_base:
         self.decoders = decoders
         self.fc1 = fcs[0]
         self.fc2 = fcs[1]
-        self.alpha = args.style_add_alpha
+        if de_aug:
+            self.alpha = args.de_aug_style_add_alpha
+        else:
+            self.alpha = args.style_add_alpha
         self.args = args
         if args.cuda:
             for encoder in self.encoders:
@@ -66,29 +42,64 @@ class cycle_enhance_base:
 
         self.style_image = None
         if not self.args.random_style:
-            self.style_image = self.load_and_process_style_img(args.style_path)
+            if de_aug:
+                self.style_image = self.load_and_process_style_img(args.de_aug_style_path)
+            else:
+                self.style_image = self.load_and_process_style_img(args.style_path)
             self.style_feats = [self.style_image.unsqueeze(0)]
 
-        path = os.path.join(os.path.dirname(__file__), '..',self.args.log_dir,'noise')
+        path = os.path.join(os.path.dirname(__file__), '..', self.args.log_dir, 'noise')
         if os.path.exists(path):
             import shutil
             shutil.rmtree(path)
         self.step = 0
 
-        path = os.path.join(os.path.dirname(__file__), '..',self.args.log_dir,'noise')
+        path = os.path.join(os.path.dirname(__file__), '..', self.args.log_dir, 'noise')
         if os.path.exists(path):
             import shutil
             shutil.rmtree(path)
         self.step = 0
 
+    def add_style(self, content, flag, save_images=False, de_aug=False):
+        if flag == 0:
+            self.step += 1
+        assert (len(content.size()) == 4)
+        if self.args.random_style:
+            style = self.load_style_img(self.args, content, wh=(content.size(3), content.size(2)))
+        else:
+            if self.style_feats[flag][0].size() == content[0].size():
+                # style = self.coral(self.style_feats[flag][0], content[0])
+                style = self.style_feats[flag][0]
+            else:
+                style = self.load_style_img(self.args, content, wh=(content.size(3), content.size(2)))
+        with torch.no_grad():
+            output = self.style_transfer(content[0], style, flag, self.alpha)
+        for i in range(1, content.size(0)):
+            # style = self.coral(self.style_feats[flag][0], content[i])
+            with torch.no_grad():
+                output = torch.cat((output, self.style_transfer(
+                    content[i], style, flag, self.alpha)), 0)
+        if flag == 0:
+            # clip 0-255
+            output = (output.permute(0, 2, 3, 1) + torch.from_numpy(self.pixel_means).float().cuda()).clamp(0, 255)
+            output = output.permute(0, 3, 1, 2).contiguous()
+            if self.step % 30 == 1 and save_images:
+                self.show(content, content=True)
+                if de_aug:
+                    self.show(output, de_aug=True)
+                else:
+                    self.show(output)
+        return output.detach()
 
-    def get_style_feats(self, args):
+    def get_style_feats(self, args, de_aug=False):
         if self.style_image is None:
-            self.style_image = self.load_and_process_style_img(args.style_path)
+            if de_aug:
+                self.style_image = self.load_and_process_style_img(args.de_aug_style_path)
+            else:
+                self.style_image = self.load_and_process_style_img(args.style_path)
         feats = [self.style_image.unsqueeze(0)]
         return feats
 
-    
     def load_and_process_style_img(self, path):
         im = Image.open(path)
         im = im.convert('RGB')
@@ -105,27 +116,29 @@ class cycle_enhance_base:
         if self.args.cuda:
             im = im.cuda()
         return im
-    
+
     def style_transfer(self, content, style, flag, alpha=1.0):
         assert (0.0 <= alpha <= 1.0)
         assert (len(content.size()) == 3)
         content = content.unsqueeze(0)
         style = style.unsqueeze(0)
-        size=content.size()
+        size = content.size()
         with torch.no_grad():
             for i in range(flag, self.num):
                 content = self.encoders[i](content).float()
                 style = self.encoders[i](style).float()
             feat = self.adaptive_instance_normalization(content, style, self.fc1, self.fc2)
             feat = feat * alpha + content * (1 - alpha)
-            for i in range(self.num-flag):
+            for i in range(self.num - flag):
                 feat = self.decoders[i](feat)
 
-        if feat.size()!=size:
-            feat = torch.from_numpy(cv2.resize(feat[0].transpose(0, 1).transpose(1, 2).cpu().numpy(),(size[3],size[2]))).cuda().unsqueeze(0)
-            feat = feat.permute(0,3,1,2)
+        if feat.size() != size:
+            feat = torch.from_numpy(
+                cv2.resize(feat[0].transpose(0, 1).transpose(1, 2).cpu().numpy(), (size[3], size[2]))).cuda().unsqueeze(
+                0)
+            feat = feat.permute(0, 3, 1, 2)
         return feat
-            
+
     def load_style_img(self, args, content=None, wh=None):
         if args.random_style and content is not None and len(content.size()) == 4:
             # Use random style image from current batch for faster training
@@ -158,8 +171,6 @@ class cycle_enhance_base:
             im = im.cuda()
         return im
 
-
-
     def coral(self, source, target):
         # assume both source and target are 3D array (C, H, W)
         # Note: flatten -> f
@@ -189,8 +200,8 @@ class cycle_enhance_base:
         )
 
         source_f_transfer = source_f_norm_transfer * \
-            target_f_std.expand_as(source_f_norm) + \
-            target_f_mean.expand_as(source_f_norm)
+                            target_f_std.expand_as(source_f_norm) + \
+                            target_f_mean.expand_as(source_f_norm)
 
         return source_f_transfer.view(source.size())
 
@@ -214,9 +225,9 @@ class cycle_enhance_base:
 
         normalized_feat = (content_feat - content_mean.expand(
             size)) / content_std.expand(size)
-        
-        mixed_style_mean = torch.cat((style_mean,content_mean),1).squeeze(2).squeeze(2)
-        mixed_style_std = torch.cat((style_std,content_std),1).squeeze(2).squeeze(2)
+
+        mixed_style_mean = torch.cat((style_mean, content_mean), 1).squeeze(2).squeeze(2)
+        mixed_style_std = torch.cat((style_std, content_std), 1).squeeze(2).squeeze(2)
 
         new_style_mean = (fc1(mixed_style_mean)).unsqueeze(2).unsqueeze(2)
         new_style_std = (fc2(mixed_style_std)).unsqueeze(2).unsqueeze(2)
@@ -233,7 +244,7 @@ class cycle_enhance_base:
         feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
         return feat_mean, feat_std
 
-    def show(self, feat, content=False,save=True):
+    def show(self, feat, content=False, save=True, de_aug=False):
         feat = torch.nan_to_num(feat)
         for i in range(feat.size(0)):
             s = feat[i].transpose(
@@ -246,9 +257,12 @@ class cycle_enhance_base:
                 if not os.path.exists(path):
                     os.makedirs(path)
                 if content:
-                    matplotlib.image.imsave(os.path.join(path, 'step'+str(self.step)+'_real'+str(i)+'.jpg'), s)
+                    matplotlib.image.imsave(os.path.join(path, 'step' + str(self.step) + '_real' + str(i) + '.jpg'), s)
                 else:
-                    matplotlib.image.imsave(os.path.join(path, 'step'+str(self.step)+'_'+str(i)+'.jpg'), s)
+                    if de_aug:
+                        matplotlib.image.imsave(os.path.join(path, 'step' + str(self.step) + '_de_aug' + str(i) + '.jpg'), s)
+                    else:
+                        matplotlib.image.imsave(os.path.join(path, 'step' + str(self.step) + '_' + str(i) + '.jpg'), s)
             else:
                 plt.imshow(s)
                 plt.show()

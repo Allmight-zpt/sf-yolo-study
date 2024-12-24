@@ -1,0 +1,20 @@
+# YOLOv5 🚀 by Ultralytics, AGPL-3.0 license
+# COCO 2017 dataset http://cocodataset.org by Microsoft
+# Example usage: python train.py --data coco.yaml
+# parent
+# ├── yolov5
+# └── datasets
+path: D:\file\data_object_image_2\training     # 修改为包含图片和标签的父文件夹
+train: train.txt # train images (relative to 'path')
+val: val.txt # val images (relative to 'path')
+
+nc: 7      # 修改为类别数量
+# Classes
+names:
+  0: car
+  1: van
+  2: truck
+  3: tram
+  4: pedestrian
+  5: cyclist
+  6: misc
