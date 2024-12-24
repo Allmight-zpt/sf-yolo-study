@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
+from tqdm import tqdm
 
 
 def compress_png(input_path):
@@ -75,19 +76,20 @@ def process_folders(folder_paths):
     folder_compression_ratios = {}  # 存储每个文件夹的压缩比列表
     all_compression_ratios = []  # 存储所有图片的压缩比，用于统一归一化
 
-    # 遍历文件夹
-    for folder in folder_paths:
+    # 使用tqdm包装folder_paths来为文件夹遍历创建进度条
+    for folder in tqdm(folder_paths, desc='Processing folders', unit='folder'):
         if not os.path.isdir(folder):
             print(f"路径 {folder} 不是一个有效的文件夹!")
             continue
 
         compression_ratios = []
-        for filename in os.listdir(folder):
+        # 获取文件夹内的所有文件，并使用tqdm包装以显示处理进度
+        files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f)) and (f.endswith('.png') or f.endswith('.jpg'))]
+        for filename in tqdm(files, desc=f'Processing images in {os.path.basename(folder)}', unit='img', leave=False):
             file_path = os.path.join(folder, filename)
-            if os.path.isfile(file_path) and (filename.endswith('.png') or filename.endswith('.jpg')):  # 只处理PNG图片
-                compression_ratio = compress_png(file_path)
-                compression_ratios.append(compression_ratio)
-                all_compression_ratios.append(compression_ratio)  # 将所有数据加入统一归一化列表
+            compression_ratio = compress_png(file_path)
+            compression_ratios.append(compression_ratio)
+            all_compression_ratios.append(compression_ratio)  # 将所有数据加入统一归一化列表
 
         if compression_ratios:
             folder_compression_ratios[folder] = compression_ratios
@@ -266,11 +268,8 @@ if __name__ == '__main__':
     FROM_FILE:直接从文件中读取compress值
     PLOT:是否画图
     '''
-    #
-    CAL = False
-    #
-    From_FILE = True
-    # 是否画图
+    CAL = True
+    From_FILE = False
     PLOT = True
 
     folder_compression_ratios = None

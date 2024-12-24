@@ -9,6 +9,11 @@ from TargetAugment.enhance_vgg16 import enhance_vgg16
 
 
 def get_style_images(im_data, args, adain=None):
+    # TargetAugment_v5 augment core
+    if args.aug_v5_ac:
+        images, _ = next(adain)
+        images = images.to('cuda' if torch.cuda.is_available() else 'cpu', non_blocking=True)
+        return images
     # TargetAugment_v4 cycle forward twice augment
     if args.aug_v4_cycle_forward_twice:
         cycle = adain

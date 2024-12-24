@@ -282,7 +282,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                               image_weights=opt.image_weights,
                                               quad=opt.quad,
                                               prefix=colorstr('train: '),
-                                              shuffle=True,
+                                              shuffle=False,
                                               seed=opt.seed)
     labels = np.concatenate(dataset.labels, 0)
     mlc = int(labels[:, 0].max())  # max label class
@@ -354,18 +354,37 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 f'Starting training for {epochs} epochs...')
                 # if ni % (nb // 4) == 0 and ni!=nb:
 
-    adain = enhance_vgg16(opt)
+    if opt.aug_v5_ac:
+        '''
+        train_loader shuffle已经改成false！！！
+        '''
+        from datasets_tools.cal_distance.adain_add_style import ImageDatasetWithPaths
+        from torchvision import transforms
+        from torch.utils.data import DataLoader
+        # 定义 transform，确保图像加载时为 [0, 255] 范围
+        transform = transforms.Compose([
+            transforms.Resize((opt.imgsz, opt.imgsz)),  # 如果需要 resize
+            transforms.ToTensor(),  # 将图像转化为 [0, 1] 范围的 tensor
+            transforms.Lambda(lambda x: x * 255),  # 将 [0, 1] 范围的图像值转为 [0, 255]
+            # transforms.Normalize(mean=[0, 0, 0], std=[255, 255, 255])  # 确保均值和标准差为正确值，防止除法影响
+        ])
+        # 加载数据集
+        dataset = ImageDatasetWithPaths(opt.ac_data_path, transform=transform)
+        # 创建DataLoader
+        data_loader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=False)
+        adain = iter(data_loader)
     # TargetAugment_v4 cycle forward twice augment
-    if opt.aug_v4_cycle_forward_twice:
+    elif opt.aug_v4_cycle_forward_twice:
         adain = cycle_enhance(opt)
     # TargetAugment_v3 cycle augment
-    if opt.aug_v3_cycle:
+    elif opt.aug_v3_cycle:
         adain = cycle_enhance(opt)
     # TargetAugment_v2 atmosphere scattering
-    if opt.aug_v2_atmo:
+    elif opt.aug_v2_atmo:
         adain = atmo_enhance(opt)
+    else:
+        adain = enhance_vgg16(opt)
 
-    
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         callbacks.run('on_train_epoch_start')
         model_student.train()
@@ -735,6 +754,9 @@ def parse_opt(known=False):
     # TargetAugment_v4 cycle forward twice augment
     parser.add_argument('--aug_v4_cycle_forward_twice', action='store_true', help='use target augmentation version 4 cycle forward twice augment')
 
+    # TargetAugment_v5 augment core
+    parser.add_argument('--aug_v5_ac', action='store_true', help='use target augmentation version 5 augment core')
+    parser.add_argument('--ac_data_path', type=str, help='augment core output data path')
 
     return parser.parse_known_args()[0] if known else parser.parse_args()
 

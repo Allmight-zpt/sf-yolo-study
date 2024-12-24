@@ -11,7 +11,7 @@ import random
 from torchvision import transforms as transforms
 
 class enhance_base:
-    def add_style(self, content, flag, save_images=False):
+    def add_style(self, content, flag, save_images=False, save_real_name=None, style_only=False, save_all=False):
         if flag == 0:
             self.step += 1
         assert (len(content.size()) == 4)
@@ -34,9 +34,14 @@ class enhance_base:
             # clip 0-255
             output=(output.permute(0,2,3,1)+torch.from_numpy(self.pixel_means).float().cuda()).clamp(0,255)
             output=output.permute(0,3,1,2).contiguous()
-            if self.step%30==1 and save_images:
-                self.show(content,content=True)
-                self.show(output)
+            if save_all:
+                save_freq = True
+            else:
+                save_freq = (self.step % 30 == 1)
+            if save_freq and save_images:
+                if not style_only:
+                    self.show(content, content=True, save=True, save_real_name=save_real_name)
+                self.show(output, content=False, save=True, save_real_name=save_real_name)
         return output.detach()
 
     def __init__(self, args, encoders, decoders, fcs):
@@ -233,7 +238,7 @@ class enhance_base:
         feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
         return feat_mean, feat_std
 
-    def show(self, feat, content=False,save=True):
+    def show(self, feat, content=False,save=True, save_real_name=None):
         feat = torch.nan_to_num(feat)
         for i in range(feat.size(0)):
             s = feat[i].transpose(
@@ -246,9 +251,15 @@ class enhance_base:
                 if not os.path.exists(path):
                     os.makedirs(path)
                 if content:
-                    matplotlib.image.imsave(os.path.join(path, 'step'+str(self.step)+'_real'+str(i)+'.jpg'), s)
+                    if save_real_name is not None:
+                        matplotlib.image.imsave(os.path.join(path, save_real_name[i].split('.')[0]+'_real'+'.jpg'), s)
+                    else:
+                        matplotlib.image.imsave(os.path.join(path, 'step'+str(self.step)+'_real'+str(i)+'.jpg'), s)
                 else:
-                    matplotlib.image.imsave(os.path.join(path, 'step'+str(self.step)+'_'+str(i)+'.jpg'), s)
+                    if save_real_name is not None:
+                        matplotlib.image.imsave(os.path.join(path, save_real_name[i].split('.')[0]+'.jpg'), s)
+                    else:
+                        matplotlib.image.imsave(os.path.join(path, 'step'+str(self.step)+'_'+str(i)+'.jpg'), s)
             else:
                 plt.imshow(s)
                 plt.show()

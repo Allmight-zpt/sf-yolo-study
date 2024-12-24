@@ -9,7 +9,7 @@
 ## 使用方法
 ### step1: adain_add_style.py 执行下面的命令进行风格增强，得到不同风格强度的数据集
 ```shell
-python ./adain_add_style.py --data ./sub_datasets_foggy --decoder_path ../../TargetAugment_train/models/city2foggy/decoder_iter_160000.pth --encoder_path ../../TargetAugment_train/pre_trained/vgg16_ori.pth --fc1 ../../TargetAugment_train/models/city2foggy/fc1_iter_160000.pth --fc2 ../../TargetAugment_train/models/city2foggy/fc2_iter_160000.pth --style_add_alpha 0.4 --style_path ../../TargetAugment_train/data/meanfoggy/meanfoggy.jpg --device 0 --save_style_samples
+python ./adain_add_style.py --data ./sub_datasets_foggy/origin_data --decoder_path ../../TargetAugment_train/models/city2foggy/decoder_iter_160000.pth --encoder_path ../../TargetAugment_train/pre_trained/vgg16_ori.pth --fc1 ../../TargetAugment_train/models/city2foggy/fc1_iter_160000.pth --fc2 ../../TargetAugment_train/models/city2foggy/fc2_iter_160000.pth --style_add_alpha 0.4 --style_path ../../TargetAugment_train/data/meanfoggy/meanfoggy.jpg --device 0 --save_style_samples
 ```
 
 ### step2: compress_radios.py 计算不同数据集的compress radios，生成compress_radios.csv文件
@@ -24,7 +24,7 @@ python compress_dis.py
 
 ### step4: augment_core.py 基于compress_dis.csv文件进行自适应增强逻辑
 ```shell
-python Augment_Core.py
+python augment_core.py --decoder_path ../../TargetAugment_train/models/city2foggy/decoder_iter_160000.pth --encoder_path ../../TargetAugment_train/pre_trained/vgg16_ori.pth --fc1 ../../TargetAugment_train/models/city2foggy/fc1_iter_160000.pth --fc2 ../../TargetAugment_train/models/city2foggy/fc2_iter_160000.pth --style_path ../../TargetAugment_train/data/meanfoggy/meanfoggy.jpg --device 0 --save_style_samples
 ```
 
 ## 将AC结果融入Mean-teacher框架中
