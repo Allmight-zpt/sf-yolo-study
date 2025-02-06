@@ -158,20 +158,20 @@ def plot_heatmap(folder_compression_ratios, labels, num_bins=10):
     plt.imshow(heatmap_data, aspect='auto', cmap='YlOrRd')
 
     # 设置横轴和纵轴标签
-    plt.xticks(ticks=np.arange(num_bins), labels=[f'{bins[i]:.2f}' for i in range(num_bins)], rotation=45)
-    plt.yticks(ticks=np.arange(len(labels)), labels=labels)
+    plt.xticks(ticks=np.arange(num_bins), labels=[f'{bins[i]:.2f}' for i in range(num_bins)], rotation=45, fontdict={'fontsize': 18})
+    plt.yticks(ticks=np.arange(len(labels)), labels=labels, fontdict={'fontsize': 18})
 
     plt.colorbar(label='Number of Images')
-    plt.title('Heatmap of Image Compression Ratios')
-    plt.xlabel('Compression Ratio Bins')
-    plt.ylabel('Categories')
+    # plt.title('Heatmap of Image Compression Ratios')
+    # plt.xlabel('Compression Ratio Bins')
+    # plt.ylabel('Categories')
     plt.tight_layout()
     plt.show()
 
 
 if __name__ == '__main__':
-    """
-        # 示例使用
+
+    # 示例使用
     aug_folder_paths = [
         "./runs/train/exp/enhance_style_samples",
         "./runs/train/exp2/enhance_style_samples",
@@ -180,6 +180,23 @@ if __name__ == '__main__':
         "./runs/train/exp5/enhance_style_samples"
     ]
 
+    labels = [
+        "alpha: 0.01",
+        "alpha: 0.02",
+        "alpha: 0.03",
+        "alpha: 0.04",
+        "alpha: 0.05"
+    ]
+
+    """
+    aug_folder_paths = [
+        "./runs/train/exp/enhance_style_samples",
+        "./runs/train/exp2/enhance_style_samples",
+        "./runs/train/exp3/enhance_style_samples",
+        "./runs/train/exp4/enhance_style_samples",
+        "./runs/train/exp5/enhance_style_samples"
+    ]
+    
     de_aug_folder_paths = [
         "./runs/train/exp6/enhance_style_samples",
         "./runs/train/exp7/enhance_style_samples",
@@ -268,13 +285,13 @@ if __name__ == '__main__':
     FROM_FILE:直接从文件中读取compress值
     PLOT:是否画图
     '''
-    CAL = True
-    From_FILE = False
+    CAL = False
+    From_FILE = True
     PLOT = True
 
     folder_compression_ratios = None
     if CAL:
-        folder_compression_ratios = process_folders(three_images)
+        folder_compression_ratios = process_folders(aug_folder_paths)
         df = pd.DataFrame(folder_compression_ratios)
         file_paths = get_file_paths("./sub_datasets_foggy/origin_data")
         df['file_paths'] = file_paths
@@ -282,5 +299,5 @@ if __name__ == '__main__':
     if From_FILE:
         folder_compression_ratios = pd.read_csv('compression_ratios.csv').iloc[:, 0:-1].to_dict(orient='list')
     if PLOT:
-        visualize_compression_ratios(folder_compression_ratios, three_labels)
-        plot_heatmap(folder_compression_ratios, three_labels, num_bins=15)
+        visualize_compression_ratios(folder_compression_ratios, labels)
+        plot_heatmap(folder_compression_ratios, labels, num_bins=15)

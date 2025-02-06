@@ -354,6 +354,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 f'Starting training for {epochs} epochs...')
                 # if ni % (nb // 4) == 0 and ni!=nb:
 
+    data_loader = None
     if opt.aug_v5_ac:
         '''
         train_loader shuffle已经改成false！！！
@@ -372,7 +373,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         dataset = ImageDatasetWithPaths(opt.ac_data_path, transform=transform)
         # 创建DataLoader
         data_loader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=False)
-        adain = iter(data_loader)
     # TargetAugment_v4 cycle forward twice augment
     elif opt.aug_v4_cycle_forward_twice:
         adain = cycle_enhance(opt)
@@ -386,6 +386,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         adain = enhance_vgg16(opt)
 
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
+        if opt.aug_v5_ac:
+            adain = iter(data_loader)
         callbacks.run('on_train_epoch_start')
         model_student.train()
 

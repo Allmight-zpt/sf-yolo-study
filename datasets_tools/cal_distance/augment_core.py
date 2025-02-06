@@ -24,7 +24,7 @@ def parse_opt(known=False):
     parser.add_argument('--seed', type=int, default=0, help='Global training seed')
     parser.add_argument('--project', default='./runs/train', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-    parser.add_argument('--compression_dis', default='compression_dis.csv', type=str, help='Decoder path')
+    parser.add_argument('--compression_dis', default='compression_dis.csv', type=str, help='compression distance infomation path')
     # Logger arguments
     parser.add_argument('--decoder_path', type=str, help='Decoder path')
     parser.add_argument('--encoder_path', type=str, help='Encoder path')
